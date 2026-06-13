@@ -134,6 +134,33 @@ payroll.employees
 payroll.timesheets
 ```
 
+#### 3. Token File (self-refreshing)
+
+This is the best choice for a self-hosted, single-user setup (e.g. running locally in Claude Desktop/Code) when you want **persistent authentication without a paid Custom Connection**, and it works in **every region** (Custom Connections do not).
+
+Authenticate once with the standard OAuth2 **authorization-code flow** including the `offline_access` scope, and save the token response to a JSON file. Point the server at it with `XERO_TOKEN_FILE`. The server renews the access token via the rolling refresh token whenever it is near expiry, and persists the rotated refresh token back to the file (written atomically, `0600`).
+
+```json
+{
+  "mcpServers": {
+    "xero": {
+      "command": "npx",
+      "args": ["-y", "@xeroapi/xero-mcp-server@latest"],
+      "env": {
+        "XERO_TOKEN_FILE": "/absolute/path/to/xero-tokens.json",
+        "XERO_CLIENT_ID": "your_client_id_here",
+        "XERO_CLIENT_SECRET": "your_client_secret_here",
+        "XERO_TENANT_ID": "optional_tenant_id_to_pin_one_org"
+      }
+    }
+  }
+}
+```
+
+The token file must contain at least `access_token` and `refresh_token` (the raw token response from the authorization-code exchange works as-is). `XERO_CLIENT_ID` / `XERO_CLIENT_SECRET` are used to perform the refresh. `XERO_TENANT_ID` is optional — set it to pin the client to a single organisation when the token has multiple tenants connected; otherwise the first connected tenant is used.
+
+NOTE: `XERO_TOKEN_FILE` takes precedence over `XERO_CLIENT_BEARER_TOKEN` and Custom Connections when defined. Request the same scopes listed under [Required Scopes for Bearer Token](#required-scopes-for-bearer-token) (plus `offline_access`).
+
 
 ### Available MCP Commands
 
