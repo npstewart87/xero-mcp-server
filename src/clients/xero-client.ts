@@ -1,6 +1,5 @@
 import axios, { AxiosError } from "axios";
 import dotenv from "dotenv";
-import fs from "fs";
 import {
   IXeroClientConfig,
   Organisation,
@@ -8,6 +7,12 @@ import {
   XeroClient,
 } from "xero-node";
 
+import {
+  persistTokens,
+  readTokens,
+  stampExpiry,
+  TokenStore,
+} from "../auth/token-store.js";
 import { ensureError } from "../helpers/ensure-error.js";
 
 dotenv.config();
@@ -268,20 +273,7 @@ class RefreshingTokenXeroClient extends MCPXeroClient {
     this.tenantOverride = config.tenantId || undefined;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private readTokens(): any {
-    return JSON.parse(fs.readFileSync(this.tokenFile, "utf-8"));
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private persist(tok: any): void {
-    const tmp = `${this.tokenFile}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(tok, null, 2), { mode: 0o600 });
-    fs.renameSync(tmp, this.tokenFile);
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async refresh(refreshToken: string): Promise<any> {
+  private async refresh(refreshToken: string): Promise<TokenStore> {
     const credentials = Buffer.from(
       `${this.clientId}:${this.clientSecret}`,
     ).toString("base64");
@@ -298,16 +290,13 @@ class RefreshingTokenXeroClient extends MCPXeroClient {
       },
     );
 
-    const tok = response.data;
-    const now = Math.floor(Date.now() / 1000);
-    tok._obtained_at = now;
-    tok.expires_at = now + (tok.expires_in ?? 1800);
-    this.persist(tok);
+    const tok = stampExpiry(response.data as TokenStore);
+    persistTokens(this.tokenFile, tok);
     return tok;
   }
 
   public async authenticate(): Promise<void> {
-    let tok = this.readTokens();
+    let tok = readTokens(this.tokenFile);
     const now = Math.floor(Date.now() / 1000);
 
     // Prefer an absolute expires_at; fall back to _obtained_at + expires_in;
